@@ -102,6 +102,43 @@ def fit_hedonic_model(data):
 # 3. TANI TESTLERİ (DIAGNOSTICS)
 # ----------------------------------------------------------------
 
+def calculate_rmse(model, data):
+    """
+    RMSE (Root Mean Square Error) hesapla.
+    
+    Üç ayrı ölçüm:
+    1. RMSE (log-scale): log(fiyat) tahminindeki hata
+    2. RMSE (dollar): back-transformed tahminlerdeki dolar cinsinden ortalama hata
+    3. MAPE (%): Mean Absolute Percentage Error - yüzde cinsinden ortalama mutlak hata
+    """
+    
+    # Log-scale tahminler ve gerçek değerler
+    y_pred_log = model.fittedvalues
+    y_actual_log = data["log_price"]
+    
+    # Log-scale RMSE
+    rmse_log = np.sqrt(np.mean((y_actual_log - y_pred_log) ** 2))
+    
+    # Dollar-scale (back-transformed) RMSE
+    y_pred_dollar = np.exp(y_pred_log)
+    y_actual_dollar = np.exp(y_actual_log)
+    rmse_dollar = np.sqrt(np.mean((y_actual_dollar - y_pred_dollar) ** 2))
+    
+    # Mean Absolute Percentage Error (MAPE)
+    mape = np.mean(np.abs((y_actual_dollar - y_pred_dollar) / y_actual_dollar)) * 100
+    
+    # Yaklaşık yüzde hata (log-scale RMSE'den türetilmiş)
+    # exp(RMSE_log) - 1 ≈ ortalama yüzde sapma
+    approx_percentage_error = (np.exp(rmse_log) - 1) * 100
+    
+    return {
+        "rmse_log": rmse_log,
+        "rmse_dollar": rmse_dollar,
+        "mape": mape,
+        "approx_percentage_error": approx_percentage_error,
+    }
+
+
 def run_diagnostics(model, data):
     results = {}
 
@@ -121,6 +158,10 @@ def run_diagnostics(model, data):
     vif_data["variable"] = X_vif.columns
     vif_data["VIF"] = [variance_inflation_factor(X_vif.values, i) for i in range(X_vif.shape[1])]
     results["vif"] = vif_data
+    
+    # RMSE hesaplamaları
+    rmse_results = calculate_rmse(model, data)
+    results["rmse_metrics"] = rmse_results
 
     return results
 
@@ -183,6 +224,20 @@ def main():
     print("\nVIF (Çoklu Doğrusal Bağlantı) Tablosu:")
     print(diagnostics["vif"].to_string(index=False))
     print("  -> VIF > 10 olan değişkenler ciddi çoklu doğrusal bağlantı işareti taşır")
+    
+    # RMSE sonuçları
+    rmse_metrics = diagnostics["rmse_metrics"]
+    print("\n" + "=" * 70)
+    print("RMSE VE TAHMIN HATA METRİKLERİ")
+    print("=" * 70)
+    print(f"RMSE (log-scale):               {rmse_metrics['rmse_log']:.6f}")
+    print(f"  -> Modelin log(fiyat) tahminindeki standart sapma")
+    print(f"\nRMSE (dollar):                  ${rmse_metrics['rmse_dollar']:,.2f}")
+    print(f"  -> Ortalama tahmin hatası (dolar cinsinden)")
+    print(f"\nMAPE (Mean Absolute %Error):    {rmse_metrics['mape']:.2f}%")
+    print(f"  -> Fiyat tahminindeki ortalama yüzde mutlak hata")
+    print(f"\nYaklaşık Yüzde Hata:             {rmse_metrics['approx_percentage_error']:.2f}%")
+    print(f"  -> Tipik tahmin sapması (log-scale'ten türetilmiş)")
 
     make_plots(model, data)
 
